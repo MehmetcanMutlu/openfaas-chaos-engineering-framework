@@ -1,0 +1,50 @@
+version: 1.0
+provider:
+  name: openfaas
+  gateway: http://127.0.0.1:8080
+
+functions:
+  order-validator:
+    lang: dockerfile
+    handler: .
+    image: chaos-order-validator:latest
+    environment:
+      FUNCTION_NAME: order-validator
+      INVENTORY_CHECKER_URL: http://gateway.openfaas:8080/function/inventory-checker
+      FAULT_LATENCY_MS: "0"
+      FAULT_ERROR_RATE: "0"
+      DOWNSTREAM_FAIL: "false"
+
+  inventory-checker:
+    lang: dockerfile
+    handler: .
+    image: chaos-inventory-checker:latest
+    environment:
+      FUNCTION_NAME: inventory-checker
+      PAYMENT_PROCESSOR_URL: http://gateway.openfaas:8080/function/payment-processor
+      FAULT_LATENCY_MS: "0"
+      FAULT_ERROR_RATE: "0"
+      DOWNSTREAM_FAIL: "false"
+
+  payment-processor:
+    lang: dockerfile
+    handler: .
+    image: chaos-payment-processor:latest
+    environment:
+      FUNCTION_NAME: payment-processor
+      NOTIFICATION_DISPATCHER_URL: http://gateway.openfaas:8080/function/notification-dispatcher
+      FAULT_LATENCY_MS: "0"
+      FAULT_ERROR_RATE: "0"
+      DOWNSTREAM_FAIL: "false"
+
+  notification-dispatcher:
+    lang: dockerfile
+    handler: .
+    image: chaos-notification-dispatcher:latest
+    environment:
+      FUNCTION_NAME: notification-dispatcher
+      NOTIFICATION_PROVIDER_URL: mock://notification-provider/send
+      FAULT_LATENCY_MS: "0"
+      FAULT_ERROR_RATE: "0"
+      DOWNSTREAM_FAIL: "false"
+

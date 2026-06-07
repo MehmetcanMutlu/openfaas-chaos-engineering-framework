@@ -1,0 +1,20 @@
+{
+  "name": "openfaas-chaos-engineering-framework",
+  "version": "1.0.0",
+  "description": "Node.js OpenFaaS chaos engineering framework for a chained serverless order pipeline.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "ui": "node src/ui-server.js",
+    "dev:local": "bash scripts/start-local.sh",
+    "serve:local": "bash scripts/serve-local.sh",
+    "stop:local": "bash scripts/stop-local.sh",
+    "test": "node --test tests/unit/*.test.js",
+    "lint": "node --check src/server.js && node --check src/ui-server.js && node --check src/shared/*.js && node --check src/functions/*.js && node --check public/app.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,51 @@
+services:
+  order-validator:
+    build: .
+    image: chaos-order-validator:local
+    environment:
+      FUNCTION_NAME: order-validator
+      INVENTORY_CHECKER_URL: http://inventory-checker:8080
+      FAULT_LATENCY_MS: ${ORDER_FAULT_LATENCY_MS:-0}
+      FAULT_ERROR_RATE: ${ORDER_FAULT_ERROR_RATE:-0}
+      DOWNSTREAM_FAIL: ${ORDER_DOWNSTREAM_FAIL:-false}
+    ports:
+      - "8081:8080"
+    depends_on:
+      - inventory-checker
+
+  inventory-checker:
+    build: .
+    image: chaos-inventory-checker:local
+    environment:
+      FUNCTION_NAME: inventory-checker
+      PAYMENT_PROCESSOR_URL: http://payment-processor:8080
+      FAULT_LATENCY_MS: ${INVENTORY_FAULT_LATENCY_MS:-0}
+      FAULT_ERROR_RATE: ${INVENTORY_FAULT_ERROR_RATE:-0}
+      DOWNSTREAM_FAIL: ${INVENTORY_DOWNSTREAM_FAIL:-false}
+    ports:
+      - "8082:8080"
+
+  payment-processor:
+    build: .
+    image: chaos-payment-processor:local
+    environment:
+      FUNCTION_NAME: payment-processor
+      NOTIFICATION_DISPATCHER_URL: http://notification-dispatcher:8080
+      FAULT_LATENCY_MS: ${PAYMENT_FAULT_LATENCY_MS:-0}
+      FAULT_ERROR_RATE: ${PAYMENT_FAULT_ERROR_RATE:-0}
+      DOWNSTREAM_FAIL: ${PAYMENT_DOWNSTREAM_FAIL:-false}
+    ports:
+      - "8083:8080"
+
+  notification-dispatcher:
+    build: .
+    image: chaos-notification-dispatcher:local
+    environment:
+      FUNCTION_NAME: notification-dispatcher
+      NOTIFICATION_PROVIDER_URL: mock://notification-provider/send
+      FAULT_LATENCY_MS: ${NOTIFICATION_FAULT_LATENCY_MS:-0}
+      FAULT_ERROR_RATE: ${NOTIFICATION_FAULT_ERROR_RATE:-0}
+      DOWNSTREAM_FAIL: ${NOTIFICATION_DOWNSTREAM_FAIL:-false}
+    ports:
+      - "8084:8080"
+

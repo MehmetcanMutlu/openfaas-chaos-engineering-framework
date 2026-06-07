@@ -74,11 +74,27 @@ curl -s -X POST http://127.0.0.1:8081 \
 
 ## OpenFaaS Deploy
 
+The repository includes a deploy-ready infrastructure kit for the technologies listed in the proposal:
+
+- OpenFaaS stack: `stack.yml`
+- k3s/k3d + OpenFaaS guide: `infra/openfaas/README.md`
+- Prometheus scrape config: `infra/prometheus/prometheus.yml`
+- Grafana dashboard JSON: `infra/grafana/dashboard-openfaas-chaos.json`
+- Technology mapping: `docs/technology-alignment.md`
+
+The local UI remains the recommended classroom demo because it is fast and reliable. The OpenFaaS/k3s/Prometheus/Grafana files prove that the same pipeline can be deployed and observed through the proposed infrastructure stack.
+
 ```bash
 faas-cli deploy -f stack.yml
 ```
 
 For Kubernetes clusters that cannot pull local images, retag the four images in `stack.yml` with your registry prefix before deploying.
+
+For the guided deployment path:
+
+```bash
+bash infra/openfaas/deploy-stack.sh
+```
 
 Run k6 against OpenFaaS:
 

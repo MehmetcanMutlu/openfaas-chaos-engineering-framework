@@ -3,6 +3,7 @@
 const { callJson } = require("../shared/httpClient");
 const { jsonResponse } = require("../shared/response");
 const { sleep } = require("../shared/time");
+const { appendTrace, traceFromDownstream } = require("../shared/trace");
 
 const VALID_CURRENCIES = new Set(["USD", "EUR", "TRY"]);
 
@@ -11,26 +12,38 @@ async function handler(context) {
 
   const validation = validateOrder(context.body);
   if (!validation.valid) {
+    const trace = appendTrace(context.body.trace, "order-validator", "failed", "Payload validation failed", {
+      errors: validation.errors
+    });
+
     return jsonResponse(400, {
       stage: "order-validator",
       error: "Order validation failed",
-      details: validation.errors
+      details: validation.errors,
+      trace
     });
   }
 
   const order = normalizeOrder(context.body);
+  const trace = appendTrace(context.body.trace, "order-validator", "success", "Payload and business rules validated", {
+    items: order.items.length,
+    amount: order.payment.amount
+  });
   const inventoryResponse = await callJson(context, "inventory-checker", process.env.INVENTORY_CHECKER_URL, {
-    order
+    order,
+    trace
   }, {
     timeoutMs: 3000
   });
 
   if (!inventoryResponse.ok) {
+    const failedTrace = traceFromDownstream(trace, inventoryResponse.body, "inventory-checker", "Inventory Checker returned an error");
     return jsonResponse(500, {
       stage: "order-validator",
       error: "Inventory stage failed",
       downstreamStatus: inventoryResponse.status,
-      downstream: inventoryResponse.body
+      downstream: inventoryResponse.body,
+      trace: failedTrace
     });
   }
 
@@ -39,7 +52,8 @@ async function handler(context) {
     status: "accepted",
     orderId: order.orderId,
     customerId: order.customerId,
-    pipeline: inventoryResponse.body
+    pipeline: inventoryResponse.body,
+    trace: inventoryResponse.body.trace || trace
   });
 }
 
@@ -125,4 +139,3 @@ module.exports = {
   handler,
   validateOrder
 };
-

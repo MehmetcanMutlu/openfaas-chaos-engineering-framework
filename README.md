@@ -42,6 +42,8 @@ npm run stop:local
 
 The dashboard lets you switch between baseline, payment latency, inventory errors, and notification downstream failure. It writes the selected values into each function process environment through the local-only `/faults` endpoint, and the middleware still reads faults from `FAULT_LATENCY_MS`, `FAULT_ERROR_RATE`, and `DOWNSTREAM_FAIL`.
 
+For presentation, use **Tek Sipariş Çalıştır** to show one request moving through Order Validator, Inventory Checker, Payment Processor, and Notification Dispatcher. Use **20 Sipariş Deneyi** only when you want to demonstrate error rate and P50/P99 latency under repeated requests.
+
 Docker Compose is also available:
 
 ```bash

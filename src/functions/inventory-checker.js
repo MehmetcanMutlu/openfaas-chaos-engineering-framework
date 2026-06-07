@@ -3,6 +3,7 @@
 const { callJson } = require("../shared/httpClient");
 const { jsonResponse } = require("../shared/response");
 const { sleep } = require("../shared/time");
+const { appendTrace, traceFromDownstream } = require("../shared/trace");
 
 const INVENTORY = new Map([
   ["SKU-CHAOS-001", 100],
@@ -15,37 +16,50 @@ async function handler(context) {
 
   const order = context.body.order;
   if (!order) {
+    const trace = appendTrace(context.body.trace, "inventory-checker", "failed", "Order payload was missing");
     return jsonResponse(400, {
       stage: "inventory-checker",
-      error: "Missing order payload"
+      error: "Missing order payload",
+      trace
     });
   }
 
   const unavailableItems = findUnavailableItems(order.items || []);
   if (unavailableItems.length > 0) {
+    const trace = appendTrace(context.body.trace, "inventory-checker", "failed", "Inventory check rejected unavailable items", {
+      unavailableItems
+    });
+
     return jsonResponse(409, {
       stage: "inventory-checker",
       error: "Inventory unavailable",
-      unavailableItems
+      unavailableItems,
+      trace
     });
   }
 
+  const trace = appendTrace(context.body.trace, "inventory-checker", "success", "Inventory reserved for all requested items", {
+    reservationId: `inv-${order.orderId}`
+  });
   const paymentResponse = await callJson(context, "payment-processor", process.env.PAYMENT_PROCESSOR_URL, {
     order,
     reservation: {
       reserved: true,
       reservationId: `inv-${order.orderId}`
-    }
+    },
+    trace
   }, {
     timeoutMs: 3000
   });
 
   if (!paymentResponse.ok) {
+    const failedTrace = traceFromDownstream(trace, paymentResponse.body, "payment-processor", "Payment Processor returned an error");
     return jsonResponse(500, {
       stage: "inventory-checker",
       error: "Payment stage failed",
       downstreamStatus: paymentResponse.status,
-      downstream: paymentResponse.body
+      downstream: paymentResponse.body,
+      trace: failedTrace
     });
   }
 
@@ -55,7 +69,8 @@ async function handler(context) {
       reserved: true,
       reservationId: `inv-${order.orderId}`
     },
-    payment: paymentResponse.body
+    payment: paymentResponse.body,
+    trace: paymentResponse.body.trace || trace
   });
 }
 
@@ -73,4 +88,3 @@ module.exports = {
   findUnavailableItems,
   handler
 };
-

@@ -4,6 +4,7 @@ const { getFaultConfig } = require("./config");
 const { metrics } = require("./metrics");
 const { jsonResponse, normalizeResponse, outcomeForStatus } = require("./response");
 const { elapsedMs, elapsedSeconds, sleep } = require("./time");
+const { appendTrace } = require("./trace");
 
 function withFaultInjection(functionName, handler) {
   return async function wrappedHandler(context) {
@@ -31,7 +32,11 @@ function withFaultInjection(functionName, handler) {
         response = jsonResponse(500, {
           error: "Synthetic function failure",
           function: functionName,
-          injectedFault: "FAULT_ERROR_RATE"
+          injectedFault: "FAULT_ERROR_RATE",
+          trace: appendTrace(context.body && context.body.trace, functionName, "failed", "Middleware returned synthetic HTTP 500 before handler execution", {
+            fault: "FAULT_ERROR_RATE",
+            errorRate: faultConfig.errorRate
+          })
         });
       } else {
         response = normalizeResponse(await handler(context));
@@ -40,7 +45,10 @@ function withFaultInjection(functionName, handler) {
       response = jsonResponse(500, {
         error: "Unhandled function error",
         function: functionName,
-        message: error.message
+        message: error.message,
+        trace: appendTrace(context.body && context.body.trace, functionName, "failed", "Unhandled exception inside function", {
+          message: error.message
+        })
       });
     } finally {
       response = normalizeResponse(response);
@@ -80,4 +88,3 @@ function withFaultInjection(functionName, handler) {
 module.exports = {
   withFaultInjection
 };
-

@@ -1,22 +1,72 @@
 "use strict";
 
+const stages = [
+  {
+    id: "order-validator",
+    label: "Order Validator",
+    purpose: "Payload ve iş kuralları doğrulanır."
+  },
+  {
+    id: "inventory-checker",
+    label: "Inventory Checker",
+    purpose: "Mock stok dependency kontrol edilir."
+  },
+  {
+    id: "payment-processor",
+    label: "Payment Processor",
+    purpose: "Latency-sensitive ödeme gateway simüle edilir."
+  },
+  {
+    id: "notification-dispatcher",
+    label: "Notification Dispatcher",
+    purpose: "Final müşteri bildirimi dependency'si çağrılır."
+  }
+];
+
+const scenarios = {
+  baseline: {
+    label: "A · Normal Baseline",
+    target: "Yok",
+    impact: "HTTP 200, düşük latency",
+    narrative: "Baseline: fault yok. Sipariş Order Validator'dan Notification Dispatcher'a kadar başarılı ilerler."
+  },
+  "payment-latency": {
+    label: "B · Payment Latency",
+    target: "Payment Processor",
+    impact: "HTTP 200 kalır, latency yaklaşık +500 ms artar",
+    narrative: "Payment Processor middleware'i handler öncesi 500 ms bekler. Hata yoktur, ama senkron zincir nedeniyle uçtan uca latency yükselir."
+  },
+  "inventory-errors": {
+    label: "C · Inventory Errors",
+    target: "Inventory Checker",
+    impact: "Yaklaşık %40 HTTP 500, downstream fonksiyonlara daha az trafik",
+    narrative: "Inventory Checker middleware'i bazı istekleri handler'a girmeden HTTP 500 yapar. Bu isteklerde Payment ve Notification aşamalarına hiç gidilmez."
+  },
+  "notification-failure": {
+    label: "D · Notification Failure",
+    target: "Notification Dispatcher dependency",
+    impact: "HTTP 500, hata zincirin başına geri yayılır",
+    narrative: "Notification Dispatcher outbound provider çağrısı middleware tarafından synthetic failure'a çevrilir. Son aşamadaki hata Payment, Inventory ve Order Validator'a geri döner."
+  },
+  custom: {
+    label: "Custom",
+    target: "Özel fault ayarı",
+    impact: "Aktif environment değişkenlerine göre değişir",
+    narrative: "Sistemde dashboard senaryolarından farklı bir fault kombinasyonu aktif."
+  }
+};
+
 const state = {
   services: [],
   metrics: [],
   samples: [],
-  activeScenario: "baseline"
-};
-
-const scenarioLabels = {
-  baseline: "Baseline",
-  "payment-latency": "Payment +500 ms",
-  "inventory-errors": "Inventory 40% 500",
-  "notification-failure": "Notification failure",
-  custom: "Custom"
+  activeScenario: "baseline",
+  lastTrace: [],
+  lastResult: null
 };
 
 const sampleOrder = () => ({
-  orderId: `order-ui-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+  orderId: `order-demo-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
   customerId: "customer-dashboard",
   items: [
     { sku: "SKU-CHAOS-001", quantity: 1 },
@@ -38,10 +88,7 @@ document.addEventListener("DOMContentLoaded", () => {
 function bindEvents() {
   document.getElementById("refreshButton").addEventListener("click", refreshAll);
   document.getElementById("sendOrderButton").addEventListener("click", () => sendOneOrder(true));
-  document.getElementById("runLoadButton").addEventListener("click", runMiniLoad);
-  document.getElementById("clearLogButton").addEventListener("click", () => {
-    document.getElementById("eventLog").innerHTML = "";
-  });
+  document.getElementById("runLoadButton").addEventListener("click", runOrderExperiment);
 
   for (const button of document.querySelectorAll(".scenario-button")) {
     button.addEventListener("click", async () => {
@@ -68,7 +115,10 @@ async function applyScenario(scenario) {
     const result = await apiPost("/api/scenario", { scenario });
     state.activeScenario = result.scenario || scenario;
     state.samples = [];
-    addEvent(`${scenarioLabels[state.activeScenario]} uygulandı`);
+    state.lastTrace = [];
+    state.lastResult = null;
+    document.getElementById("responseOutput").textContent = "{}";
+    addEvent(`${scenarioTitle()} seçildi. Fault hedefi: ${scenarioConfig().target}.`);
     await refreshAll();
   } finally {
     setBusy(false);
@@ -79,26 +129,16 @@ async function sendOneOrder(logEvent) {
   setBusy(true);
   try {
     const result = await apiPost("/api/order", sampleOrder());
-    state.samples.push({
-      status: result.status,
-      ok: result.ok,
-      durationMs: result.durationMs
-    });
-
-    if (state.samples.length > 200) {
-      state.samples.shift();
-    }
-
-    document.getElementById("responseOutput").textContent = JSON.stringify(result.body, null, 2);
-    document.getElementById("lastLatency").textContent = `${result.durationMs} ms`;
-    document.getElementById("lastRunStatus").textContent = result.ok ? "Başarılı" : `HTTP ${result.status}`;
-    document.getElementById("lastRunStatus").className = `pill ${result.ok ? "ok" : "fail"}`;
+    recordResult(result);
 
     if (logEvent) {
-      addEvent(`Sipariş tamamlandı: HTTP ${result.status}, ${result.durationMs} ms`);
+      const stage = failedStageLabel(state.lastTrace);
+      const message = result.ok
+        ? `Tek sipariş başarılı: HTTP ${result.status}, ${result.durationMs} ms.`
+        : `Tek sipariş başarısız: HTTP ${result.status}, hata aşaması ${stage}.`;
+      addEvent(message);
     }
 
-    renderSampleMetrics();
     await refreshAll();
     return result;
   } finally {
@@ -106,47 +146,64 @@ async function sendOneOrder(logEvent) {
   }
 }
 
-async function runMiniLoad() {
+async function runOrderExperiment() {
   const count = clamp(Number(document.getElementById("loadCount").value), 1, 100);
   setBusy(true);
-  addEvent(`${count} istekli mini test başladı`);
+  addEvent(`${count} siparişlik deney başladı: P50/P99 ve hata oranı ölçülüyor.`);
 
   try {
     const results = [];
     for (let index = 0; index < count; index += 1) {
       const result = await apiPost("/api/order", sampleOrder());
-      state.samples.push({
-        status: result.status,
-        ok: result.ok,
-        durationMs: result.durationMs
-      });
+      recordResult(result, false);
       results.push(result);
       renderSampleMetrics();
-    }
-
-    if (state.samples.length > 200) {
-      state.samples = state.samples.slice(-200);
+      renderPipeline();
     }
 
     const errors = results.filter((result) => !result.ok).length;
     const durations = results.map((result) => result.durationMs);
-    document.getElementById("responseOutput").textContent = JSON.stringify(results.at(-1).body, null, 2);
-    document.getElementById("lastLatency").textContent = `${percentile(durations, 50)} ms P50`;
-    document.getElementById("lastRunStatus").textContent = `${errors}/${count} hata`;
-    document.getElementById("lastRunStatus").className = `pill ${errors > 0 ? "fail" : "ok"}`;
-    addEvent(`Mini test bitti: ${count - errors} başarılı, ${errors} hata, P99 ${percentile(durations, 99)} ms`);
+    const errorRate = Math.round((errors / results.length) * 100);
+    addEvent(`Deney bitti: ${results.length - errors}/${results.length} başarılı, hata oranı %${errorRate}, P99 ${percentile(durations, 99)} ms.`);
     await refreshAll();
   } finally {
     setBusy(false);
   }
 }
 
+function recordResult(result, updateResponse = true) {
+  state.lastResult = result;
+  state.lastTrace = extractTrace(result.body);
+  state.samples.push({
+    status: result.status,
+    ok: result.ok,
+    durationMs: result.durationMs
+  });
+
+  if (state.samples.length > 200) {
+    state.samples.shift();
+  }
+
+  if (updateResponse) {
+    document.getElementById("responseOutput").textContent = JSON.stringify(result.body, null, 2);
+  }
+
+  const statusText = result.ok ? "Başarılı" : `HTTP ${result.status}`;
+  document.getElementById("lastRunStatus").textContent = statusText;
+  document.getElementById("lastRunStatus").className = `pill ${result.ok ? "ok" : "fail"}`;
+  document.getElementById("lastLatency").textContent = `${result.durationMs} ms`;
+  document.getElementById("resultSummary").textContent = summarizeResult(result);
+
+  renderSampleMetrics();
+  renderPipeline();
+}
+
 function render() {
   renderServiceStrip();
+  renderScenario();
   renderPipeline();
   renderMetricsTable();
   renderSampleMetrics();
-  renderScenarioButtons();
 }
 
 function renderServiceStrip() {
@@ -155,52 +212,76 @@ function renderServiceStrip() {
     <div class="service-chip">
       <div>
         <strong>${escapeHtml(service.label)}</strong>
-        <small>${escapeHtml(service.url)}</small>
+        <small>${service.healthy ? "healthy" : "down"} · ${faultText(service.faults)}</small>
       </div>
       <span class="dot ${service.healthy ? "ok" : ""}" aria-label="${service.healthy ? "healthy" : "down"}"></span>
     </div>
   `).join("");
 }
 
+function renderScenario() {
+  const scenario = scenarioConfig();
+  document.getElementById("activeScenario").textContent = scenario.label;
+  document.getElementById("scenarioNarrative").textContent = scenario.narrative;
+  document.getElementById("faultTarget").textContent = scenario.target;
+  document.getElementById("expectedImpact").textContent = scenario.impact;
+
+  for (const button of document.querySelectorAll(".scenario-button")) {
+    button.classList.toggle("active", button.dataset.scenario === state.activeScenario);
+  }
+}
+
 function renderPipeline() {
   const container = document.getElementById("pipeline");
-  container.innerHTML = state.services.map((service) => {
-    const faults = service.faults || {};
-    const activeFault = faults.latencyMs > 0 || faults.errorRate > 0 || faults.downstreamFail;
-    const className = !service.healthy ? "fail" : activeFault ? "warn" : "ok";
+  const trace = state.lastTrace;
+  const failureIndex = trace.findIndex((entry) => entry.status === "failed");
+
+  container.innerHTML = stages.map((stage, index) => {
+    const service = state.services.find((candidate) => candidate.id === stage.id) || {};
+    const traceEntry = trace.find((entry) => entry.stage === stage.id);
+    const activeFault = hasFault(service.faults);
+    const stateName = stageState(traceEntry, index, failureIndex);
+    const stateLabel = stateLabelFor(stateName);
+    const message = traceEntry ? traceEntry.message : idleMessage(state, stage, activeFault);
 
     return `
-      <article class="function-node ${className}">
-        <div class="node-title">
-          <strong>${escapeHtml(service.label)}</strong>
-          <span class="dot ${service.healthy ? "ok" : ""}"></span>
+      <article class="flow-step ${stateName} ${activeFault ? "faulted" : ""}">
+        <div class="step-index">${index + 1}</div>
+        <div class="step-content">
+          <div class="step-title">
+            <strong>${escapeHtml(stage.label)}</strong>
+            <span class="status-pill ${stateName}">${stateLabel}</span>
+          </div>
+          <p>${escapeHtml(stage.purpose)}</p>
+          <div class="step-message">${escapeHtml(message)}</div>
+          <div class="fault-config">${escapeHtml(faultText(service.faults))}</div>
         </div>
-        <div class="node-body">
-          ${faultLine("Latency", `${faults.latencyMs || 0} ms`)}
-          ${faultLine("Error rate", `${Math.round((faults.errorRate || 0) * 100)}%`)}
-          ${faultLine("Downstream fail", faults.downstreamFail ? "true" : "false")}
-        </div>
-        <span class="pill ${activeFault ? "" : "neutral"}">${activeFault ? "Fault aktif" : "Normal"}</span>
       </article>
     `;
   }).join("");
 }
 
-function faultLine(label, value) {
-  return `<div class="fault-line"><span>${label}</span><strong>${value}</strong></div>`;
-}
-
 function renderMetricsTable() {
-  const table = document.getElementById("metricsTable");
-  table.innerHTML = state.metrics.map((metric) => `
-    <tr>
-      <td>${escapeHtml(metric.label)}</td>
-      <td>${metric.requests || 0}</td>
-      <td>${metric.errors || 0}</td>
-      <td>${metric.faults || 0}</td>
-      <td>${metric.durationAvgMs || 0} ms</td>
-    </tr>
-  `).join("");
+  const container = document.getElementById("metricsTable");
+  container.innerHTML = state.metrics.map((metric) => {
+    const requests = metric.requests || 0;
+    const errors = metric.errors || 0;
+    const errorRate = requests > 0 ? Math.round((errors / requests) * 100) : 0;
+    const width = Math.min(100, errorRate);
+
+    return `
+      <div class="metric-row">
+        <div>
+          <strong>${escapeHtml(metric.label)}</strong>
+          <span>${requests} request · ${metric.faults || 0} injected fault · avg ${metric.durationAvgMs || 0} ms</span>
+        </div>
+        <div class="error-meter" aria-label="error rate">
+          <span style="width:${width}%"></span>
+        </div>
+        <b>${errorRate}% error</b>
+      </div>
+    `;
+  }).join("");
 }
 
 function renderSampleMetrics() {
@@ -208,18 +289,98 @@ function renderSampleMetrics() {
   const errorCount = state.samples.filter((sample) => !sample.ok).length;
   const total = state.samples.length;
 
-  document.getElementById("sampleSummary").textContent = `${total} örnek`;
+  document.getElementById("sampleSummary").textContent = String(total);
   document.getElementById("p50Metric").textContent = total ? `${percentile(durations, 50)} ms` : "-";
-  document.getElementById("p90Metric").textContent = total ? `${percentile(durations, 90)} ms` : "-";
   document.getElementById("p99Metric").textContent = total ? `${percentile(durations, 99)} ms` : "-";
-  document.getElementById("errorRateMetric").textContent = total ? `${Math.round((errorCount / total) * 100)}%` : "-";
+  document.getElementById("errorRateMetric").textContent = total ? `%${Math.round((errorCount / total) * 100)}` : "-";
 }
 
-function renderScenarioButtons() {
-  document.getElementById("activeScenario").textContent = scenarioLabels[state.activeScenario] || state.activeScenario;
-  for (const button of document.querySelectorAll(".scenario-button")) {
-    button.classList.toggle("active", button.dataset.scenario === state.activeScenario);
+function stageState(traceEntry, index, failureIndex) {
+  if (traceEntry && traceEntry.status === "failed") {
+    return "failed";
   }
+
+  if (traceEntry && traceEntry.status === "success") {
+    return "success";
+  }
+
+  if (failureIndex >= 0 && index > failureIndex) {
+    return "skipped";
+  }
+
+  return state.lastResult ? "skipped" : "idle";
+}
+
+function stateLabelFor(stateName) {
+  return {
+    success: "completed",
+    failed: "failed",
+    skipped: "not reached",
+    idle: "waiting"
+  }[stateName];
+}
+
+function idleMessage(appState, stage, activeFault) {
+  if (!appState.lastResult && activeFault) {
+    return "Bu fonksiyonda fault aktif. Sipariş çalıştırınca etkisi burada görülecek.";
+  }
+
+  if (!appState.lastResult) {
+    return "Sipariş bekleniyor.";
+  }
+
+  return "Önceki aşamadaki hata nedeniyle bu fonksiyona istek gitmedi.";
+}
+
+function summarizeResult(result) {
+  const scenario = scenarioConfig();
+  if (!result) {
+    return "Bir sipariş çalıştırınca burada zincirin sonucu ve hata nedeni görünür.";
+  }
+
+  if (result.ok) {
+    return `${scenario.label}: sipariş başarıyla tamamlandı. End-to-end latency ${result.durationMs} ms.`;
+  }
+
+  return `${scenario.label}: sipariş HTTP ${result.status} döndü. İlk hata aşaması: ${failedStageLabel(state.lastTrace)}.`;
+}
+
+function extractTrace(body) {
+  if (!body || typeof body !== "object") {
+    return [];
+  }
+
+  if (Array.isArray(body.trace)) {
+    return body.trace;
+  }
+
+  if (body.downstream) {
+    return extractTrace(body.downstream);
+  }
+
+  if (body.pipeline) {
+    return extractTrace(body.pipeline);
+  }
+
+  return [];
+}
+
+function failedStageLabel(trace) {
+  const failed = trace.find((entry) => entry.status === "failed");
+  if (!failed) {
+    return "yok";
+  }
+
+  const stage = stages.find((candidate) => candidate.id === failed.stage);
+  return stage ? stage.label : failed.stage;
+}
+
+function scenarioConfig() {
+  return scenarios[state.activeScenario] || scenarios.custom;
+}
+
+function scenarioTitle() {
+  return scenarioConfig().label;
 }
 
 function inferScenario(services) {
@@ -266,6 +427,32 @@ function isFault(faults, latencyMs, errorRate, downstreamFail) {
     Boolean(config.downstreamFail) === downstreamFail;
 }
 
+function hasFault(faults) {
+  const config = faults || {};
+  return Number(config.latencyMs || 0) > 0 ||
+    Number(config.errorRate || 0) > 0 ||
+    Boolean(config.downstreamFail);
+}
+
+function faultText(faults) {
+  const config = faults || {};
+  const parts = [];
+
+  if (Number(config.latencyMs || 0) > 0) {
+    parts.push(`latency ${config.latencyMs} ms`);
+  }
+
+  if (Number(config.errorRate || 0) > 0) {
+    parts.push(`error %${Math.round(Number(config.errorRate) * 100)}`);
+  }
+
+  if (config.downstreamFail) {
+    parts.push("downstream fail");
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : "fault yok";
+}
+
 function addEvent(message) {
   const log = document.getElementById("eventLog");
   const item = document.createElement("li");
@@ -273,7 +460,7 @@ function addEvent(message) {
   item.innerHTML = `<time>${now}</time> ${escapeHtml(message)}`;
   log.prepend(item);
 
-  while (log.children.length > 30) {
+  while (log.children.length > 20) {
     log.removeChild(log.lastChild);
   }
 }

@@ -86,9 +86,16 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function bindEvents() {
+  const loadCountInput = document.getElementById("loadCount");
   document.getElementById("refreshButton").addEventListener("click", refreshAll);
   document.getElementById("sendOrderButton").addEventListener("click", () => sendOneOrder(true));
   document.getElementById("runLoadButton").addEventListener("click", runOrderExperiment);
+  loadCountInput.addEventListener("input", updateExperimentCopy);
+  loadCountInput.addEventListener("change", () => {
+    loadCountInput.value = String(selectedLoadCount());
+    updateExperimentCopy();
+  });
+  updateExperimentCopy();
 
   for (const button of document.querySelectorAll(".scenario-button")) {
     button.addEventListener("click", async () => {
@@ -147,18 +154,28 @@ async function sendOneOrder(logEvent) {
 }
 
 async function runOrderExperiment() {
-  const count = clamp(Number(document.getElementById("loadCount").value), 1, 100);
+  const count = selectedLoadCount();
   setBusy(true);
+  updateExperimentCopy({
+    running: true,
+    completed: 0,
+    count
+  });
   addEvent(`${count} siparişlik deney başladı: P50/P99 ve hata oranı ölçülüyor.`);
 
   try {
     const results = [];
     for (let index = 0; index < count; index += 1) {
       const result = await apiPost("/api/order", sampleOrder());
-      recordResult(result, false);
+      recordResult(result, index === count - 1);
       results.push(result);
       renderSampleMetrics();
       renderPipeline();
+      updateExperimentCopy({
+        running: true,
+        completed: index + 1,
+        count
+      });
     }
 
     const errors = results.filter((result) => !result.ok).length;
@@ -168,6 +185,7 @@ async function runOrderExperiment() {
     await refreshAll();
   } finally {
     setBusy(false);
+    updateExperimentCopy();
   }
 }
 
@@ -482,9 +500,33 @@ async function apiPost(path, body) {
 }
 
 function setBusy(busy) {
-  for (const button of document.querySelectorAll("button")) {
-    button.disabled = busy;
+  for (const control of document.querySelectorAll("button, input")) {
+    control.disabled = busy;
   }
+}
+
+function selectedLoadCount() {
+  const value = Number(document.getElementById("loadCount").value);
+  if (!Number.isFinite(value)) {
+    return 20;
+  }
+
+  return clamp(value, 1, 100);
+}
+
+function updateExperimentCopy(options = {}) {
+  const count = options.count || selectedLoadCount();
+  const button = document.getElementById("runLoadButton");
+  const hint = document.getElementById("experimentHint");
+
+  if (options.running) {
+    button.textContent = `${options.completed}/${count} Test Ediliyor`;
+    hint.textContent = `${count} siparişlik deney çalışıyor. Her istek aynı senaryodan geçiyor; sonuçlar P50, P99 ve hata oranına ekleniyor.`;
+    return;
+  }
+
+  button.textContent = `${count} Sipariş Test Et`;
+  hint.textContent = `Seçilen senaryoda ${count} sipariş gönderip sonuçları ölçer.`;
 }
 
 function percentile(values, rank) {

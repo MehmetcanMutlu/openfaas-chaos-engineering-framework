@@ -12,7 +12,7 @@ The project is a serverless order-processing pipeline for OpenFaaS. A client req
 - **Tek Sipariş Çalıştır**: Sends one order and highlights the exact function path. Each function becomes `completed`, `failed`, or `not reached`.
 - **Canlı Sipariş Akışı**: The main presentation area. Use this to show whether the fault started at Order Validator, Inventory Checker, Payment Processor, or Notification Dispatcher.
 - **Fault hedefi / Beklenen etki / Son sipariş**: Converts the selected scenario into one clear sentence for the presenter.
-- **20 Sipariş Deneyi**: A small classroom-friendly load experiment. It sends repeated orders from the dashboard so P50, P99, and error rate become visible without needing to install k6 during the presentation.
+- **N Sipariş Test Et**: A small classroom-friendly load experiment. The button text follows the selected request count, for example `20 Sipariş Test Et` or `100 Sipariş Test Et`. It sends repeated orders from the dashboard so P50, P99, and error rate become visible without needing to install k6 during the presentation.
 - **Deney Özeti**: Shows P50, P99, error rate, request counts, injected fault counts, and per-function error rates.
 - **Sonuç ve Kanıt**: Shows the latest JSON response and demo log. The `trace` field is the proof of which function ran and where the failure started.
 
@@ -31,7 +31,7 @@ The project is a serverless order-processing pipeline for OpenFaaS. A client req
 
 3. Click **C · Inventory Errors**.
    - Say: "Inventory Checker now returns synthetic HTTP 500 on about 40% of requests before calling downstream functions."
-   - Click **20 Sipariş Deneyi**.
+   - Set the request count to 20 or 100, then click **N Sipariş Test Et**.
    - Expected result: error rate rises; failed requests show Inventory Checker as `failed`; Payment Processor and Notification Dispatcher show `not reached`.
    - Point to the metrics: Inventory error count increases and downstream traffic drops.
 
@@ -64,4 +64,3 @@ The project is working when all of these are true:
 - Payment latency increases end-to-end latency while keeping HTTP 200.
 - Inventory errors produce mixed HTTP 200 and HTTP 500 results.
 - Notification failure produces HTTP 500 and highlights Notification Dispatcher as the failure point.
-

@@ -81,13 +81,17 @@
           <div class="panel-heading">
             <div>
               <h2>Deney Özeti</h2>
-              <p class="panel-note">20 sipariş deneyi, k6 mantığının sınıf demosu için sadeleştirilmiş versiyonudur.</p>
+              <p class="panel-note">Seçtiğin sayı kadar sipariş gönderir; P50, P99 ve hata oranını canlı hesaplar.</p>
             </div>
             <div class="experiment-controls">
-              <input id="loadCount" type="number" min="1" max="100" value="20" aria-label="Deney istek sayısı">
-              <button id="runLoadButton" class="button secondary" type="button">20 Sipariş Deneyi</button>
+              <label class="experiment-count" for="loadCount">
+                <span>İstek sayısı</span>
+                <input id="loadCount" type="number" min="1" max="100" value="20" aria-label="Deney istek sayısı">
+              </label>
+              <button id="runLoadButton" class="button secondary experiment-button" type="button">20 Sipariş Test Et</button>
             </div>
           </div>
+          <p id="experimentHint" class="experiment-hint">Seçilen senaryoda 20 sipariş gönderip sonuçları ölçer.</p>
           <div class="metric-grid">
             <div class="metric-tile">
               <span>Örnek</span>
@@ -106,6 +110,7 @@
               <strong id="errorRateMetric">-</strong>
             </div>
           </div>
+          <h3 class="metric-section-title">Servis Metrikleri (Kümülatif)</h3>
           <div class="metric-bars" id="metricsTable"></div>
         </section>
 
@@ -131,4 +136,3 @@
     <script src="/app.js"></script>
   </body>
 </html>
-

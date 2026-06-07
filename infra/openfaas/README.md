@@ -9,7 +9,7 @@ This directory adds the infrastructure layer required by the project presentatio
 - OpenFaaS deployment commands for the existing `stack.yml`.
 - A clear separation between:
   - local demo: `npm run serve:local`
-  - OpenFaaS deployment proof: `faas-cli deploy -f stack.yml`
+  - OpenFaaS live deployment: `bash infra/openfaas/deploy-ttl-stack.sh`
 
 ## Prerequisites
 
@@ -41,11 +41,30 @@ k3d cluster create openfaas-chaos \
 kubectl get nodes
 ```
 
-Install OpenFaaS with arkade:
+Install OpenFaaS CE with Helm:
 
 ```bash
-arkade install openfaas
-kubectl rollout status -n openfaas deploy/gateway
+kubectl create namespace openfaas --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace openfaas-fn --dry-run=client -o yaml | kubectl apply -f -
+
+helm repo add openfaas https://openfaas.github.io/faas-netes/ || true
+helm repo update openfaas
+helm upgrade --install openfaas openfaas/openfaas \
+  --version 15.0.8 \
+  --namespace openfaas \
+  --set functionNamespace=openfaas-fn \
+  --set openfaasPro=false \
+  --set oem=false \
+  --set operator.create=false \
+  --set autoscaler.enabled=false \
+  --set dashboard.enabled=false \
+  --set generateBasicAuth=true \
+  --set basic_auth=true \
+  --set prometheus.create=true \
+  --set alertmanager.create=true \
+  --set queueWorker.replicas=1 \
+  --set gateway.replicas=1 \
+  --wait
 ```
 
 Expose the OpenFaaS gateway locally:
@@ -61,11 +80,13 @@ PASSWORD="$(kubectl get secret -n openfaas basic-auth -o jsonpath='{.data.basic-
 echo "$PASSWORD" | faas-cli login --gateway http://127.0.0.1:8080 --username admin --password-stdin
 ```
 
-Deploy the functions:
+Deploy the functions with public demo images:
 
 ```bash
-bash infra/openfaas/deploy-stack.sh
+bash infra/openfaas/deploy-ttl-stack.sh
 ```
+
+OpenFaaS CE accepts unauthenticated public function images. The `ttl.sh` script builds the project image, pushes public 24-hour demo tags, rewrites the stack image references, and deploys the same four-function pipeline.
 
 Smoke test:
 
@@ -80,19 +101,49 @@ curl -s -X POST http://127.0.0.1:8080/function/order-validator \
   }'
 ```
 
-## Native k3s VM Path
+## Prometheus And Grafana
 
-On a Linux VM, install k3s, install OpenFaaS with arkade, then run the same `deploy-stack.sh` script. If the VM uses a remote registry, export `OPENFAAS_IMAGE_OWNER` before deploying:
+Patch OpenFaaS Prometheus so it scrapes the four function `/metrics` endpoints:
 
 ```bash
-export OPENFAAS_IMAGE_OWNER=your-dockerhub-user
-bash infra/openfaas/deploy-stack.sh
+kubectl apply -f infra/prometheus/prometheus-openfaas-chaos.yml
+kubectl rollout restart -n openfaas deploy/prometheus
+kubectl rollout status -n openfaas deploy/prometheus
 ```
+
+Install Grafana with the Prometheus datasource and dashboard pre-provisioned:
+
+```bash
+kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n monitoring create configmap openfaas-chaos-dashboard \
+  --from-file=dashboard-openfaas-chaos.json=infra/grafana/dashboard-openfaas-chaos.json \
+  --dry-run=client -o yaml | kubectl apply -f -
+
+helm repo add grafana https://grafana.github.io/helm-charts || true
+helm repo update grafana
+helm upgrade --install grafana grafana/grafana \
+  --namespace monitoring \
+  -f infra/grafana/grafana-values.yml \
+  --wait
+```
+
+Expose Prometheus and Grafana locally:
+
+```bash
+kubectl port-forward -n openfaas svc/prometheus 9090:9090
+kubectl port-forward -n monitoring svc/grafana 3001:80
+```
+
+Grafana login is `admin` / `admin` for the demo.
+
+## Native k3s VM Path
+
+On a Linux VM, install k3s, install OpenFaaS with Helm, then use either a public registry or `deploy-ttl-stack.sh` for a short-lived public demo image.
 
 ## Important Notes
 
 - The current local dashboard is still the fastest live demo.
-- This OpenFaaS path proves that the same functions can be deployed to Kubernetes/OpenFaaS.
+- The OpenFaaS path now runs the same functions on k3s/k3d Kubernetes.
 - Prometheus and Grafana configs live in `infra/prometheus` and `infra/grafana`.
 - The function pipeline remains unchanged:
   `Order Validator -> Inventory Checker -> Payment Processor -> Notification Dispatcher`.

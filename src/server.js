@@ -18,7 +18,7 @@ const server = http.createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
 
   try {
-    if (request.method === "GET" && url.pathname === "/healthz") {
+    if (request.method === "GET" && (url.pathname === "/healthz" || url.pathname === "/_/health")) {
       writeResponse(response, jsonResponse(200, {
         status: "ok",
         function: functionName
@@ -65,7 +65,7 @@ const server = http.createServer(async (request, response) => {
     if (request.method !== "POST") {
       writeResponse(response, jsonResponse(405, {
         error: "Method not allowed",
-        allowed: ["POST", "GET /healthz", "GET /metrics", "GET /faults", "POST /faults"]
+        allowed: ["POST", "GET /healthz", "GET /_/health", "GET /metrics", "GET /faults", "POST /faults"]
       }), requestId);
       return;
     }

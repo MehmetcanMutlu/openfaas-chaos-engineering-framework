@@ -1,0 +1,35 @@
+adminUser: admin
+adminPassword: admin
+
+service:
+  type: ClusterIP
+
+persistence:
+  enabled: false
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus.openfaas:9090
+        isDefault: true
+        editable: true
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: openfaas-chaos
+        orgId: 1
+        folder: OpenFaaS Chaos
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/openfaas-chaos
+
+dashboardsConfigMaps:
+  openfaas-chaos: openfaas-chaos-dashboard

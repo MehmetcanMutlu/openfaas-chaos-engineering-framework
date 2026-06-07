@@ -19,17 +19,17 @@ This mode is intentionally fast and reliable for presentation. It runs the same 
 |---|---|---|
 | Node.js | Implemented | `src/functions`, `src/shared`, `src/server.js` |
 | Docker | Implemented | `Dockerfile`, `docker-compose.yml` |
-| OpenFaaS | Deploy-ready | `stack.yml`, `infra/openfaas/deploy-stack.sh` |
-| Kubernetes / k3s | Deploy-ready | `infra/openfaas/README.md` includes k3d/k3s setup paths |
-| Prometheus | Metrics-ready | every function exposes `/metrics`; config in `infra/prometheus/prometheus.yml` |
-| Grafana | Dashboard-ready | dashboard JSON in `infra/grafana/dashboard-openfaas-chaos.json` |
+| OpenFaaS | Implemented and live-run verified | `stack.yml`, `infra/openfaas/deploy-ttl-stack.sh` |
+| Kubernetes / k3s | Implemented and live-run verified through k3d | `infra/openfaas/README.md` includes k3d/k3s setup paths |
+| Prometheus | Implemented and live-run verified | every function exposes `/metrics`; configs in `infra/prometheus` |
+| Grafana | Implemented and live-run verified | dashboard JSON and Helm values in `infra/grafana` |
 | k6 | Test-ready | `tests/order-flow.k6.js` |
 
 ## Correct Presentation Statement
 
 Use this wording during the demo:
 
-> The core chaos framework and four-function pipeline are implemented and working. The classroom demo runs through the local dashboard for reliability. The same functions are packaged with Docker, deployable to OpenFaaS using `stack.yml`, and expose Prometheus metrics. The repository also includes Prometheus scrape configuration and a Grafana dashboard JSON for the OpenFaaS/Kubernetes deployment path.
+> The core chaos framework and four-function pipeline are implemented and working. The local dashboard is still the clearest classroom control screen. The same functions are also running on k3s/k3d through OpenFaaS, with Prometheus scraping the custom `chaos_*` metrics and Grafana showing the provisioned dashboard.
 
 ## Deployment Modes
 
@@ -39,12 +39,21 @@ Use this wording during the demo:
 - Shows request flow, failure propagation, P50/P99, error rate, and stoppable experiments.
 - Does not require k3s, OpenFaaS, Prometheus, or Grafana to be running.
 
-### OpenFaaS + k3s/k3d Proof
+### OpenFaaS + k3s/k3d Live Proof
 
 - Best for showing technology alignment.
-- Uses `stack.yml` and `infra/openfaas/deploy-stack.sh`.
-- Prometheus can scrape the `/metrics` endpoints.
-- Grafana can import `infra/grafana/dashboard-openfaas-chaos.json`.
+- Uses `stack.yml` and `infra/openfaas/deploy-ttl-stack.sh`.
+- Prometheus scrapes the `/metrics` endpoints through `infra/prometheus/prometheus-openfaas-chaos.yml`.
+- Grafana provisions `infra/grafana/dashboard-openfaas-chaos.json` through `infra/grafana/grafana-values.yml`.
+
+## Live Verification From June 7, 2026
+
+- k3d cluster: `openfaas-chaos`
+- OpenFaaS gateway: `http://127.0.0.1:8080`
+- OpenFaaS functions: all four deployed in `openfaas-fn` and rolled out as `1/1 Running`
+- Prometheus: `http://127.0.0.1:9090`, query `chaos_function_requests_total`
+- Grafana: `http://127.0.0.1:3001`, login `admin` / `admin`
+- Grafana dashboard: `OpenFaaS Chaos Engineering`
 
 ## Pipeline Guarantee
 
@@ -59,4 +68,3 @@ Faults remain controlled by the same environment variables:
 - `FAULT_LATENCY_MS`
 - `FAULT_ERROR_RATE`
 - `DOWNSTREAM_FAIL`
-

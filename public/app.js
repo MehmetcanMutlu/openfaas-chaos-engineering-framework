@@ -62,7 +62,14 @@ const state = {
   samples: [],
   activeScenario: "baseline",
   lastTrace: [],
-  lastResult: null
+  lastResult: null,
+  experiment: {
+    running: false,
+    stopRequested: false,
+    abortController: null,
+    completed: 0,
+    count: 0
+  }
 };
 
 const sampleOrder = () => ({
@@ -90,6 +97,7 @@ function bindEvents() {
   document.getElementById("refreshButton").addEventListener("click", refreshAll);
   document.getElementById("sendOrderButton").addEventListener("click", () => sendOneOrder(true));
   document.getElementById("runLoadButton").addEventListener("click", runOrderExperiment);
+  document.getElementById("stopLoadButton").addEventListener("click", stopOrderExperiment);
   loadCountInput.addEventListener("input", updateExperimentCopy);
   loadCountInput.addEventListener("change", () => {
     loadCountInput.value = String(selectedLoadCount());
@@ -155,6 +163,11 @@ async function sendOneOrder(logEvent) {
 
 async function runOrderExperiment() {
   const count = selectedLoadCount();
+  state.experiment.running = true;
+  state.experiment.stopRequested = false;
+  state.experiment.abortController = null;
+  state.experiment.completed = 0;
+  state.experiment.count = count;
   setBusy(true);
   updateExperimentCopy({
     running: true,
@@ -166,9 +179,29 @@ async function runOrderExperiment() {
   try {
     const results = [];
     for (let index = 0; index < count; index += 1) {
-      const result = await apiPost("/api/order", sampleOrder());
-      recordResult(result, index === count - 1);
+      if (state.experiment.stopRequested) {
+        break;
+      }
+
+      state.experiment.abortController = new AbortController();
+      let result;
+      try {
+        result = await apiPost("/api/order", sampleOrder(), {
+          signal: state.experiment.abortController.signal
+        });
+      } catch (error) {
+        if (state.experiment.stopRequested || error.name === "AbortError") {
+          break;
+        }
+
+        throw error;
+      } finally {
+        state.experiment.abortController = null;
+      }
+
+      recordResult(result, true);
       results.push(result);
+      state.experiment.completed = results.length;
       renderSampleMetrics();
       renderPipeline();
       updateExperimentCopy({
@@ -180,13 +213,46 @@ async function runOrderExperiment() {
 
     const errors = results.filter((result) => !result.ok).length;
     const durations = results.map((result) => result.durationMs);
-    const errorRate = Math.round((errors / results.length) * 100);
-    addEvent(`Deney bitti: ${results.length - errors}/${results.length} başarılı, hata oranı %${errorRate}, P99 ${percentile(durations, 99)} ms.`);
+    const errorRate = results.length > 0 ? Math.round((errors / results.length) * 100) : 0;
+
+    if (state.experiment.stopRequested) {
+      document.getElementById("lastRunStatus").textContent = "Durduruldu";
+      document.getElementById("lastRunStatus").className = "pill neutral";
+      document.getElementById("resultSummary").textContent = `${scenarioTitle()}: deney ${results.length}/${count} siparişte durduruldu.`;
+      addEvent(`Deney durduruldu: ${results.length}/${count} sipariş tamamlandı, hata oranı %${errorRate}.`);
+    } else {
+      addEvent(`Deney bitti: ${results.length - errors}/${results.length} başarılı, hata oranı %${errorRate}, P99 ${percentile(durations, 99)} ms.`);
+    }
+
     await refreshAll();
   } finally {
+    state.experiment.running = false;
+    state.experiment.stopRequested = false;
+    state.experiment.abortController = null;
+    state.experiment.completed = 0;
+    state.experiment.count = 0;
     setBusy(false);
     updateExperimentCopy();
   }
+}
+
+function stopOrderExperiment() {
+  if (!state.experiment.running) {
+    return;
+  }
+
+  state.experiment.stopRequested = true;
+  if (state.experiment.abortController) {
+    state.experiment.abortController.abort();
+  }
+
+  updateExperimentCopy({
+    running: true,
+    stopping: true,
+    completed: state.experiment.completed,
+    count: state.experiment.count || selectedLoadCount()
+  });
+  addEvent("Durdurma istendi. Mevcut istek kesilip kalan siparişler gönderilmeyecek.");
 }
 
 function recordResult(result, updateResponse = true) {
@@ -488,19 +554,25 @@ async function apiGet(path) {
   return response.json();
 }
 
-async function apiPost(path, body) {
+async function apiPost(path, body, options = {}) {
   const response = await fetch(path, {
     method: "POST",
     headers: {
       "content-type": "application/json"
     },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: options.signal
   });
   return response.json();
 }
 
 function setBusy(busy) {
   for (const control of document.querySelectorAll("button, input")) {
+    if (control.id === "stopLoadButton") {
+      control.disabled = !state.experiment.running;
+      continue;
+    }
+
     control.disabled = busy;
   }
 }
@@ -511,21 +583,26 @@ function selectedLoadCount() {
     return 20;
   }
 
-  return clamp(value, 1, 100);
+  return Math.trunc(clamp(value, 1, 100));
 }
 
 function updateExperimentCopy(options = {}) {
   const count = options.count || selectedLoadCount();
   const button = document.getElementById("runLoadButton");
+  const stopButton = document.getElementById("stopLoadButton");
   const hint = document.getElementById("experimentHint");
 
   if (options.running) {
     button.textContent = `${options.completed}/${count} Test Ediliyor`;
+    stopButton.disabled = false;
+    stopButton.textContent = options.stopping ? "Durduruluyor" : "Testi Durdur";
     hint.textContent = `${count} siparişlik deney çalışıyor. Her istek aynı senaryodan geçiyor; sonuçlar P50, P99 ve hata oranına ekleniyor.`;
     return;
   }
 
   button.textContent = `${count} Sipariş Test Et`;
+  stopButton.disabled = true;
+  stopButton.textContent = "Testi Durdur";
   hint.textContent = `Seçilen senaryoda ${count} sipariş gönderip sonuçları ölçer.`;
 }
 

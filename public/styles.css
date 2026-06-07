@@ -134,6 +134,16 @@ h3 {
   background: #eef3f9;
 }
 
+.button.danger {
+  background: #fff1ef;
+  border-color: #efb5ad;
+  color: var(--red);
+}
+
+.button.danger:not(:disabled):hover {
+  border-color: var(--red);
+}
+
 .health-band {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -456,6 +466,11 @@ h3 {
 
 .experiment-button {
   min-width: 190px;
+  white-space: nowrap;
+}
+
+.experiment-stop {
+  min-width: 126px;
   white-space: nowrap;
 }
 

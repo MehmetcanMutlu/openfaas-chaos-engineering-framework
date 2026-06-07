@@ -13,6 +13,7 @@ The project is a serverless order-processing pipeline for OpenFaaS. A client req
 - **Canlı Sipariş Akışı**: The main presentation area. Use this to show whether the fault started at Order Validator, Inventory Checker, Payment Processor, or Notification Dispatcher.
 - **Fault hedefi / Beklenen etki / Son sipariş**: Converts the selected scenario into one clear sentence for the presenter.
 - **N Sipariş Test Et**: A small classroom-friendly load experiment. The button text follows the selected request count, for example `20 Sipariş Test Et` or `100 Sipariş Test Et`. It sends repeated orders from the dashboard so P50, P99, and error rate become visible without needing to install k6 during the presentation.
+- **Testi Durdur**: Stops an in-progress repeated-order experiment. Use it if a high request count was entered during the live demo and you need to regain control quickly.
 - **Deney Özeti**: Shows P50, P99, error rate, request counts, injected fault counts, and per-function error rates.
 - **Sonuç ve Kanıt**: Shows the latest JSON response and demo log. The `trace` field is the proof of which function ran and where the failure started.
 

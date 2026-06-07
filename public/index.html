@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OpenFaaS Chaos Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">OpenFaaS serverless demo</p>
+          <h1>Chaos Engineering Dashboard</h1>
+        </div>
+        <div class="header-actions">
+          <button id="refreshButton" class="button secondary" type="button">Yenile</button>
+          <button id="sendOrderButton" class="button primary" type="button">Sipariş Gönder</button>
+        </div>
+      </header>
+
+      <section class="status-strip" aria-label="Servis durumları" id="serviceStrip"></section>
+
+      <div class="workspace-grid">
+        <section class="panel controls-panel">
+          <div class="panel-heading">
+            <h2>Senaryolar</h2>
+            <span id="activeScenario" class="pill">Baseline</span>
+          </div>
+          <div class="scenario-list">
+            <button class="scenario-button active" data-scenario="baseline" type="button">
+              <span>Baseline</span>
+              <small>Fault yok</small>
+            </button>
+            <button class="scenario-button" data-scenario="payment-latency" type="button">
+              <span>Payment +500 ms</span>
+              <small>Latency izolasyonu</small>
+            </button>
+            <button class="scenario-button" data-scenario="inventory-errors" type="button">
+              <span>Inventory 40% 500</span>
+              <small>Cascading error</small>
+            </button>
+            <button class="scenario-button" data-scenario="notification-failure" type="button">
+              <span>Notification failure</span>
+              <small>Downstream fail</small>
+            </button>
+          </div>
+
+          <div class="load-box">
+            <label for="loadCount">Mini test istek sayısı</label>
+            <div class="load-row">
+              <input id="loadCount" type="number" min="1" max="100" value="20">
+              <button id="runLoadButton" class="button secondary" type="button">Mini Test</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel pipeline-panel">
+          <div class="panel-heading">
+            <h2>Fonksiyon Zinciri</h2>
+            <span id="lastRunStatus" class="pill neutral">Hazır</span>
+          </div>
+          <div class="pipeline" id="pipeline"></div>
+        </section>
+
+        <section class="panel metrics-panel">
+          <div class="panel-heading">
+            <h2>Metrikler</h2>
+            <span id="sampleSummary" class="pill">0 örnek</span>
+          </div>
+          <div class="metric-grid">
+            <div class="metric-tile">
+              <span>P50</span>
+              <strong id="p50Metric">-</strong>
+            </div>
+            <div class="metric-tile">
+              <span>P90</span>
+              <strong id="p90Metric">-</strong>
+            </div>
+            <div class="metric-tile">
+              <span>P99</span>
+              <strong id="p99Metric">-</strong>
+            </div>
+            <div class="metric-tile">
+              <span>Hata oranı</span>
+              <strong id="errorRateMetric">-</strong>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fonksiyon</th>
+                  <th>Req</th>
+                  <th>Err</th>
+                  <th>Fault</th>
+                  <th>Avg</th>
+                </tr>
+              </thead>
+              <tbody id="metricsTable"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <section class="bottom-grid">
+        <div class="panel response-panel">
+          <div class="panel-heading">
+            <h2>Son Yanıt</h2>
+            <span id="lastLatency" class="pill">-</span>
+          </div>
+          <pre id="responseOutput">{}</pre>
+        </div>
+        <div class="panel events-panel">
+          <div class="panel-heading">
+            <h2>Canlı Test Günlüğü</h2>
+            <button id="clearLogButton" class="button ghost" type="button">Temizle</button>
+          </div>
+          <ol id="eventLog" class="event-log"></ol>
+        </div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
+

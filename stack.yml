@@ -10,6 +10,7 @@ functions:
     image: chaos-order-validator:latest
     environment:
       FUNCTION_NAME: order-validator
+      ENABLE_FAULT_CONTROL: "true"
       INVENTORY_CHECKER_URL: http://gateway.openfaas:8080/function/inventory-checker
       FAULT_LATENCY_MS: "0"
       FAULT_ERROR_RATE: "0"
@@ -21,6 +22,7 @@ functions:
     image: chaos-inventory-checker:latest
     environment:
       FUNCTION_NAME: inventory-checker
+      ENABLE_FAULT_CONTROL: "true"
       PAYMENT_PROCESSOR_URL: http://gateway.openfaas:8080/function/payment-processor
       FAULT_LATENCY_MS: "0"
       FAULT_ERROR_RATE: "0"
@@ -32,6 +34,7 @@ functions:
     image: chaos-payment-processor:latest
     environment:
       FUNCTION_NAME: payment-processor
+      ENABLE_FAULT_CONTROL: "true"
       NOTIFICATION_DISPATCHER_URL: http://gateway.openfaas:8080/function/notification-dispatcher
       FAULT_LATENCY_MS: "0"
       FAULT_ERROR_RATE: "0"
@@ -43,6 +46,7 @@ functions:
     image: chaos-notification-dispatcher:latest
     environment:
       FUNCTION_NAME: notification-dispatcher
+      ENABLE_FAULT_CONTROL: "true"
       NOTIFICATION_PROVIDER_URL: mock://notification-provider/send
       FAULT_LATENCY_MS: "0"
       FAULT_ERROR_RATE: "0"

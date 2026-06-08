@@ -1,5 +1,17 @@
 "use strict";
 
+const BASE_PATH = detectBasePath();
+const API = (path) => `${BASE_PATH}${path}`;
+
+function detectBasePath() {
+  const pathname = window.location.pathname;
+  if (pathname.startsWith("/ui")) {
+    return "/ui";
+  }
+
+  return "";
+}
+
 const stages = [
   {
     id: "order-validator",
@@ -57,6 +69,7 @@ const scenarios = {
 };
 
 const state = {
+  config: null,
   services: [],
   metrics: [],
   samples: [],
@@ -87,13 +100,34 @@ const sampleOrder = () => ({
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+  fixAssetPaths();
   bindEvents();
-  refreshAll();
+  loadConfig().then(refreshAll);
   setInterval(refreshAll, 2500);
 });
 
+function fixAssetPaths() {
+  if (!BASE_PATH) {
+    return;
+  }
+
+  for (const link of document.querySelectorAll('link[rel="stylesheet"]')) {
+    if (!link.href.includes(BASE_PATH)) {
+      link.href = `${BASE_PATH}/styles.css`;
+    }
+  }
+}
+
 function bindEvents() {
   const loadCountInput = document.getElementById("loadCount");
+  const guideToggle = document.getElementById("guideToggle");
+  const guidePanel = document.getElementById("guidePanel");
+
+  guideToggle.addEventListener("click", () => {
+    const collapsed = guidePanel.classList.toggle("collapsed");
+    guideToggle.setAttribute("aria-expanded", String(!collapsed));
+  });
+
   document.getElementById("refreshButton").addEventListener("click", refreshAll);
   document.getElementById("sendOrderButton").addEventListener("click", () => sendOneOrder(true));
   document.getElementById("runLoadButton").addEventListener("click", runOrderExperiment);
@@ -112,16 +146,53 @@ function bindEvents() {
   }
 }
 
-async function refreshAll() {
-  const [services, metrics] = await Promise.all([
-    apiGet("/api/services"),
-    apiGet("/api/metrics-summary")
-  ]);
+async function loadConfig() {
+  try {
+    const config = await apiGet("/api/config");
+    state.config = config;
+    applyConfigLinks(config);
+  } catch {
+    state.config = { mode: "local" };
+  }
+}
 
-  state.services = services.services || [];
-  state.metrics = metrics.services || [];
-  state.activeScenario = inferScenario(state.services);
-  render();
+function applyConfigLinks(config) {
+  const gateway = config.openfaasGateway || "http://127.0.0.1:18088";
+  const prometheus = config.prometheusUrl || "http://127.0.0.1:9090";
+  const grafana = config.grafanaUrl || "http://127.0.0.1:3002";
+
+  document.getElementById("linkOpenfaas").href = gateway;
+  document.getElementById("linkPrometheus").href = prometheus;
+  document.getElementById("linkGrafana").href = grafana;
+  document.getElementById("openfaasUrl").textContent = gateway.replace("http://", "");
+  document.getElementById("prometheusUrl").textContent = prometheus.replace("http://", "");
+
+  const modeLabel = config.mode === "openfaas-mod-b" ? "Mod B · k3d + OpenFaaS" : "Mod A · Yerel";
+  document.getElementById("deployMode").textContent = modeLabel;
+}
+
+async function refreshAll() {
+  try {
+    const [services, metrics] = await Promise.all([
+      apiGet("/api/services"),
+      apiGet("/api/metrics-summary")
+    ]);
+
+    state.services = services.services || [];
+    state.metrics = metrics.services || [];
+    state.activeScenario = inferScenario(state.services);
+    setConnectionStatus("ok", `${state.services.filter((s) => s.healthy).length}/4 servis healthy`);
+    render();
+  } catch (error) {
+    setConnectionStatus("error", "Bağlantı hatası — port-forward kontrol et");
+    throw error;
+  }
+}
+
+function setConnectionStatus(kind, message) {
+  const el = document.getElementById("connectionStatus");
+  el.textContent = message;
+  el.className = `connection-status ${kind}`;
 }
 
 async function applyScenario(scenario) {
@@ -142,6 +213,7 @@ async function applyScenario(scenario) {
 
 async function sendOneOrder(logEvent) {
   setBusy(true);
+  animateFlowPacket(true);
   try {
     const result = await apiPost("/api/order", sampleOrder());
     recordResult(result);
@@ -157,7 +229,15 @@ async function sendOneOrder(logEvent) {
     await refreshAll();
     return result;
   } finally {
+    animateFlowPacket(false);
     setBusy(false);
+  }
+}
+
+function animateFlowPacket(active) {
+  const packet = document.getElementById("flowPacket");
+  if (packet) {
+    packet.classList.toggle("running", active);
   }
 }
 
@@ -550,12 +630,12 @@ function addEvent(message) {
 }
 
 async function apiGet(path) {
-  const response = await fetch(path);
+  const response = await fetch(API(path));
   return response.json();
 }
 
 async function apiPost(path, body, options = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(API(path), {
     method: "POST",
     headers: {
       "content-type": "application/json"

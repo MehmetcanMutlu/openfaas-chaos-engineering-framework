@@ -9,7 +9,34 @@ This directory adds the infrastructure layer required by the project presentatio
 - OpenFaaS deployment commands for the existing `stack.yml`.
 - A clear separation between:
   - local demo: `npm run serve:local`
-  - OpenFaaS live deployment: `bash infra/openfaas/deploy-ttl-stack.sh`
+  - Mod B full stack: `npm run setup:mod-b`
+  - OpenFaaS function redeploy: `npm run deploy:openfaas`
+
+## Mod B Quick Start
+
+One-command bootstrap with k3d local registry, OpenFaaS, Prometheus, and Grafana:
+
+```bash
+npm run setup:mod-b
+npm run port-forward:mod-b
+open http://127.0.0.1:3002
+open http://127.0.0.1:8088
+```
+
+Runtime fault injection on OpenFaaS:
+
+```bash
+bash infra/openfaas/set-fault.sh payment-processor latencyMs 500
+bash infra/openfaas/set-fault.sh inventory-checker errorRate 0.4
+bash infra/openfaas/set-fault.sh notification-dispatcher downstreamFail true
+```
+
+Teardown:
+
+```bash
+npm run teardown:mod-b
+DELETE_CLUSTER=true npm run teardown:mod-b
+```
 
 ## Prerequisites
 
@@ -80,7 +107,21 @@ PASSWORD="$(kubectl get secret -n openfaas basic-auth -o jsonpath='{.data.basic-
 echo "$PASSWORD" | faas-cli login --gateway http://127.0.0.1:8080 --username admin --password-stdin
 ```
 
-Deploy the functions with public demo images:
+OpenFaaS CE only accepts public function images. Bootstrap and deploy use `deploy-ttl-stack.sh` automatically.
+
+Redeploy functions:
+
+```bash
+OPENFAAS_GATEWAY=http://127.0.0.1:8088 bash infra/openfaas/deploy-ttl-stack.sh
+```
+
+Optional k3d local registry build path (requires OpenFaaS Standard for private images):
+
+```bash
+npm run deploy:openfaas
+```
+
+Alternative public demo images via ttl.sh:
 
 ```bash
 bash infra/openfaas/deploy-ttl-stack.sh

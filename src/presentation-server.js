@@ -6,60 +6,33 @@ const path = require("path");
 const { randomUUID } = require("crypto");
 const { parseJsonBody, writeResponse, jsonResponse } = require("./shared/response");
 
-const port = Number(process.env.UI_PORT || 3000);
+const port = Number(process.env.PRESENTATION_PORT || process.env.UI_PORT || 8088);
+const basePath = normalizeBasePath(process.env.UI_BASE_PATH || "/ui");
 const publicDir = path.join(__dirname, "..", "public");
+const openfaasGateway = (process.env.OPENFAAS_GATEWAY || "http://127.0.0.1:18088").replace(/\/$/, "");
+const prometheusUrl = process.env.PROMETHEUS_URL || "http://127.0.0.1:9090";
+const grafanaUrl = process.env.GRAFANA_URL || "http://127.0.0.1:3002";
 
 const services = [
-  {
-    id: "order-validator",
-    label: "Order Validator",
-    url: process.env.ORDER_VALIDATOR_URL || "http://127.0.0.1:8081"
-  },
-  {
-    id: "inventory-checker",
-    label: "Inventory Checker",
-    url: process.env.INVENTORY_CHECKER_URL || "http://127.0.0.1:8082"
-  },
-  {
-    id: "payment-processor",
-    label: "Payment Processor",
-    url: process.env.PAYMENT_PROCESSOR_URL || "http://127.0.0.1:8083"
-  },
-  {
-    id: "notification-dispatcher",
-    label: "Notification Dispatcher",
-    url: process.env.NOTIFICATION_DISPATCHER_URL || "http://127.0.0.1:8084"
-  }
+  { id: "order-validator", label: "Order Validator", url: `${openfaasGateway}/function/order-validator` },
+  { id: "inventory-checker", label: "Inventory Checker", url: `${openfaasGateway}/function/inventory-checker` },
+  { id: "payment-processor", label: "Payment Processor", url: `${openfaasGateway}/function/payment-processor` },
+  { id: "notification-dispatcher", label: "Notification Dispatcher", url: `${openfaasGateway}/function/notification-dispatcher` }
 ];
 
 const scenarios = {
-  baseline: {
-    label: "Baseline",
-    faults: {}
-  },
+  baseline: { label: "Baseline", faults: {} },
   "payment-latency": {
     label: "Payment +500 ms",
-    faults: {
-      "payment-processor": {
-        latencyMs: 500
-      }
-    }
+    faults: { "payment-processor": { latencyMs: 500 } }
   },
   "inventory-errors": {
     label: "Inventory 40% 500",
-    faults: {
-      "inventory-checker": {
-        errorRate: 0.4
-      }
-    }
+    faults: { "inventory-checker": { errorRate: 0.4 } }
   },
   "notification-failure": {
     label: "Notification failure",
-    faults: {
-      "notification-dispatcher": {
-        downstreamFail: true
-      }
-    }
+    faults: { "notification-dispatcher": { downstreamFail: true } }
   }
 };
 
@@ -68,28 +41,46 @@ const server = http.createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
 
   try {
-    if (url.pathname.startsWith("/api/")) {
+    if (url.pathname === "/" || url.pathname === "") {
+      redirect(response, `${basePath}/`);
+      return;
+    }
+
+    if (url.pathname === basePath || url.pathname === `${basePath}`) {
+      redirect(response, `${basePath}/`);
+      return;
+    }
+
+    if (url.pathname.startsWith(`${basePath}/api/`)) {
       await routeApi(request, response, url, requestId);
       return;
     }
 
-    await serveStatic(response, url.pathname);
+    if (url.pathname.startsWith(`${basePath}/`)) {
+      await serveStatic(response, url.pathname.slice(basePath.length) || "/index.html");
+      return;
+    }
+
+    response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+    response.end("Not found. Open presentation UI at /ui/");
   } catch (error) {
     writeResponse(response, jsonResponse(500, {
-      error: "UI server error",
+      error: "Presentation server error",
       message: error.message
     }), requestId);
   }
 });
 
 async function routeApi(request, response, url, requestId) {
-  if (request.method === "GET" && url.pathname === "/api/config") {
+  const apiPath = url.pathname.slice(`${basePath}/api`.length) || "/";
+
+  if (request.method === "GET" && apiPath === "/config") {
     writeResponse(response, jsonResponse(200, {
-      mode: "local",
-      basePath: "",
-      openfaasGateway: null,
-      prometheusUrl: null,
-      grafanaUrl: null,
+      mode: "openfaas-mod-b",
+      basePath,
+      openfaasGateway,
+      prometheusUrl,
+      grafanaUrl,
       services: services.map((service) => ({
         id: service.id,
         label: service.label
@@ -98,44 +89,35 @@ async function routeApi(request, response, url, requestId) {
     return;
   }
 
-  if (request.method === "GET" && url.pathname === "/api/services") {
+  if (request.method === "GET" && apiPath === "/services") {
     writeResponse(response, jsonResponse(200, {
       services: await getServicesState()
     }), requestId);
     return;
   }
 
-  if (request.method === "GET" && url.pathname === "/api/metrics-summary") {
+  if (request.method === "GET" && apiPath === "/metrics-summary") {
     writeResponse(response, jsonResponse(200, {
       services: await getMetricsSummary()
     }), requestId);
     return;
   }
 
-  if (request.method === "POST" && url.pathname === "/api/order") {
+  if (request.method === "POST" && apiPath === "/order") {
     const body = await parseJsonBody(request);
     const result = await postOrder(body);
     writeResponse(response, jsonResponse(200, result), requestId);
     return;
   }
 
-  if (request.method === "POST" && url.pathname === "/api/scenario") {
+  if (request.method === "POST" && apiPath === "/scenario") {
     const body = await parseJsonBody(request);
     const result = await applyScenario(body.scenario || "baseline");
     writeResponse(response, jsonResponse(200, result), requestId);
     return;
   }
 
-  if (request.method === "POST" && url.pathname === "/api/faults") {
-    const body = await parseJsonBody(request);
-    const result = await applyFault(body.serviceId, body.faults || {});
-    writeResponse(response, jsonResponse(200, result), requestId);
-    return;
-  }
-
-  writeResponse(response, jsonResponse(404, {
-    error: "API route not found"
-  }), requestId);
+  writeResponse(response, jsonResponse(404, { error: "API route not found" }), requestId);
 }
 
 async function getServicesState() {
@@ -147,7 +129,7 @@ async function getServicesState() {
 
     return {
       ...service,
-      healthy: health.ok && health.body.status === "ok",
+      healthy: health.ok && health.body && health.body.status === "ok",
       healthStatus: health.status,
       faultStatus: faults.status,
       faultControlEnabled: Boolean(faults.body && faults.body.faultControlEnabled),
@@ -200,13 +182,9 @@ async function applyScenario(scenarioId) {
     };
   }
 
-  const baseline = {
-    latencyMs: 0,
-    errorRate: 0,
-    downstreamFail: false
-  };
-
+  const baseline = { latencyMs: 0, errorRate: 0, downstreamFail: false };
   const results = [];
+
   for (const service of services) {
     results.push(await applyFault(service.id, {
       ...baseline,
@@ -225,18 +203,12 @@ async function applyScenario(scenarioId) {
 async function applyFault(serviceId, faults) {
   const service = services.find((candidate) => candidate.id === serviceId);
   if (!service) {
-    return {
-      serviceId,
-      applied: false,
-      error: "Unknown service"
-    };
+    return { serviceId, applied: false, error: "Unknown service" };
   }
 
   const response = await fetchJson(`${service.url}/faults`, {
     method: "POST",
-    headers: {
-      "content-type": "application/json"
-    },
+    headers: { "content-type": "application/json" },
     body: JSON.stringify(faults)
   });
 
@@ -258,13 +230,7 @@ async function fetchJson(url, options) {
       body: parseBody(text)
     };
   } catch (error) {
-    return {
-      ok: false,
-      status: 0,
-      body: {
-        error: error.message
-      }
-    };
+    return { ok: false, status: 0, body: { error: error.message } };
   }
 }
 
@@ -277,12 +243,7 @@ async function fetchText(url) {
       body: await response.text()
     };
   } catch (error) {
-    return {
-      ok: false,
-      status: 0,
-      body: "",
-      error: error.message
-    };
+    return { ok: false, status: 0, body: "", error: error.message };
   }
 }
 
@@ -369,9 +330,7 @@ async function serveStatic(response, pathname) {
     return;
   }
 
-  response.writeHead(200, {
-    "content-type": contentType(filePath)
-  });
+  response.writeHead(200, { "content-type": contentType(filePath) });
   fs.createReadStream(filePath).pipe(response);
 }
 
@@ -391,11 +350,35 @@ function contentType(filePath) {
   return "application/octet-stream";
 }
 
-server.listen(port, () => {
-  console.log(JSON.stringify({
-    event: "ui_started",
+function redirect(response, location) {
+  response.writeHead(302, { location });
+  response.end();
+}
+
+function normalizeBasePath(value) {
+  const trimmed = String(value || "/ui").trim();
+  if (trimmed === "/") {
+    return "";
+  }
+
+  return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
+}
+
+server.on("error", (error) => {
+  console.error(JSON.stringify({
+    event: "presentation_ui_error",
     port,
-    url: `http://127.0.0.1:${port}`
+    message: error.message
   }));
+  process.exit(1);
 });
 
+server.listen(port, () => {
+  console.log(JSON.stringify({
+    event: "presentation_ui_started",
+    port,
+    basePath,
+    url: `http://127.0.0.1:${port}${basePath}/`,
+    openfaasGateway
+  }));
+});

@@ -3,47 +3,133 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>OpenFaaS Chaos Demo</title>
-    <link rel="stylesheet" href="/styles.css">
+    <title>OpenFaaS Chaos Engineering — Sunum</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
   </head>
   <body>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <div class="bg-glow bg-glow-a" aria-hidden="true"></div>
+    <div class="bg-glow bg-glow-b" aria-hidden="true"></div>
+
     <main class="app-shell">
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">COMP 4206 · OpenFaaS · Prometheus-ready metrics</p>
-          <h1>Serverless Chaos Engineering Demo</h1>
-          <p class="subtitle">Bir sipariş isteğinin dört fonksiyonluk zincirde nasıl ilerlediğini ve fault injection etkisini canlı gösterir.</p>
+      <header class="topbar fade-in">
+        <div class="brand">
+          <div class="brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none"><circle cx="24" cy="24" r="22" stroke="currentColor" stroke-width="2" opacity=".3"/><path d="M14 24h8l4-8 4 16 4-8h8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <div>
+            <p class="eyebrow">COMP 4206 · Chaos Engineering · Serverless Pipeline</p>
+            <h1>OpenFaaS Chaos Engineering Demo</h1>
+            <p class="subtitle">Dört fonksiyonlu sipariş zincirinde fault injection etkisini canlı gösterir — k3s, OpenFaaS, Prometheus ve Grafana ile.</p>
+          </div>
         </div>
         <div class="header-actions">
-          <button id="refreshButton" class="button secondary" type="button">Yenile</button>
-          <button id="sendOrderButton" class="button primary" type="button">Tek Sipariş Çalıştır</button>
+          <button id="refreshButton" class="button secondary" type="button">
+            <span class="btn-icon" aria-hidden="true">↻</span> Yenile
+          </button>
+          <button id="sendOrderButton" class="button primary pulse-on-hover" type="button">
+            <span class="btn-icon" aria-hidden="true">▶</span> Tek Sipariş Çalıştır
+          </button>
         </div>
       </header>
 
-      <section class="health-band" aria-label="Servis durumları" id="serviceStrip"></section>
+      <section class="stack-band fade-in delay-1" aria-label="Altyapı bağlantıları">
+        <a id="linkOpenfaas" class="stack-card" href="#" target="_blank" rel="noopener">
+          <span class="stack-icon openfaas">λ</span>
+          <div><strong>OpenFaaS Gateway</strong><small id="openfaasUrl">—</small></div>
+        </a>
+        <a id="linkPrometheus" class="stack-card" href="#" target="_blank" rel="noopener">
+          <span class="stack-icon prometheus">◎</span>
+          <div><strong>Prometheus</strong><small id="prometheusUrl">—</small></div>
+        </a>
+        <a id="linkGrafana" class="stack-card" href="#" target="_blank" rel="noopener">
+          <span class="stack-icon grafana">◈</span>
+          <div><strong>Grafana</strong><small>admin / admin</small></div>
+        </a>
+        <div class="stack-card mode-card">
+          <span class="stack-icon k3s">⬡</span>
+          <div><strong id="deployMode">Mod B · k3d</strong><small>4 fonksiyon · fault control aktif</small></div>
+        </div>
+      </section>
 
-      <section class="demo-layout">
+      <section class="guide-panel fade-in delay-2" id="guidePanel">
+        <button class="guide-toggle" id="guideToggle" type="button" aria-expanded="true">
+          <span class="guide-toggle-icon">📋</span>
+          <span>Sunum Rehberi — Adım Adım Nasıl Kullanılır?</span>
+          <span class="chevron" aria-hidden="true">▾</span>
+        </button>
+        <div class="guide-body" id="guideBody">
+          <ol class="guide-steps">
+            <li>
+              <strong>1. Altyapıyı doğrula</strong>
+              <p>Üstteki yeşil servis çipleri dört fonksiyonun healthy olduğunu gösterir. Kırmızıysa <code>npm run port-forward:mod-b</code> çalıştır.</p>
+            </li>
+            <li>
+              <strong>2. Baseline ile başla</strong>
+              <p>Sol panelden <em>A · Normal Baseline</em> seç. Fault yok — zincir uçtan uca başarılı çalışır.</p>
+            </li>
+            <li>
+              <strong>3. Tek sipariş gönder</strong>
+              <p><em>Tek Sipariş Çalıştır</em> ile pipeline animasyonunu izle. Her adımın durumu (success / failed / skipped) canlı güncellenir.</p>
+            </li>
+            <li>
+              <strong>4. Chaos senaryosu uygula</strong>
+              <p>B, C veya D senaryosunu seç — fault otomatik enjekte edilir. Tekrar sipariş gönder ve etkiyi karşılaştır.</p>
+            </li>
+            <li>
+              <strong>5. Yük testi yap</strong>
+              <p>20–100 sipariş göndererek P50, P99 ve hata oranını ölç. Senaryolar arası farkı rakamlarla göster.</p>
+            </li>
+            <li>
+              <strong>6. Grafana & Prometheus ile kanıtla</strong>
+              <p>Üstteki linklerden <code>chaos_function_requests_total</code> ve dashboard'u aç — metrikler gerçek zamanlı akar.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="health-band fade-in delay-2" aria-label="Servis durumları" id="serviceStrip"></section>
+
+      <section class="demo-layout fade-in delay-3">
         <aside class="scenario-panel">
           <div class="panel-heading">
-            <h2>Senaryo Seç</h2>
+            <h2>
+              <span class="panel-icon" aria-hidden="true">⚡</span>
+              Senaryo Seç
+            </h2>
             <span id="activeScenario" class="pill">Baseline</span>
           </div>
           <div class="scenario-list">
             <button class="scenario-button active" data-scenario="baseline" type="button">
-              <span>A · Normal Baseline</span>
-              <small>Fault yok, zincir uçtan uca başarılı çalışır.</small>
+              <span class="scenario-letter">A</span>
+              <div>
+                <span>Normal Baseline</span>
+                <small>Fault yok, zincir uçtan uca başarılı çalışır.</small>
+              </div>
             </button>
             <button class="scenario-button" data-scenario="payment-latency" type="button">
-              <span>B · Payment Latency</span>
-              <small>Payment Processor 500 ms gecikir, hata üretmez.</small>
+              <span class="scenario-letter latency">B</span>
+              <div>
+                <span>Payment Latency</span>
+                <small>Payment Processor +500 ms gecikir, hata üretmez.</small>
+              </div>
             </button>
             <button class="scenario-button" data-scenario="inventory-errors" type="button">
-              <span>C · Inventory Errors</span>
-              <small>Inventory Checker yaklaşık %40 HTTP 500 üretir.</small>
+              <span class="scenario-letter error">C</span>
+              <div>
+                <span>Inventory Errors</span>
+                <small>Inventory Checker ~%40 HTTP 500 üretir.</small>
+              </div>
             </button>
             <button class="scenario-button" data-scenario="notification-failure" type="button">
-              <span>D · Notification Failure</span>
-              <small>Son dependency tamamen başarısız olur.</small>
+              <span class="scenario-letter fail">D</span>
+              <div>
+                <span>Notification Failure</span>
+                <small>Son dependency tamamen başarısız olur.</small>
+              </div>
             </button>
           </div>
         </aside>
@@ -51,36 +137,56 @@
         <section class="flow-panel">
           <div class="panel-heading">
             <div>
-              <h2>Canlı Sipariş Akışı</h2>
+              <h2>
+                <span class="panel-icon" aria-hidden="true">🔗</span>
+                Canlı Sipariş Akışı
+              </h2>
               <p id="scenarioNarrative" class="panel-note">Baseline: istek dört fonksiyondan geçer ve müşteri bildirimi başarıyla tamamlanır.</p>
             </div>
             <span id="lastRunStatus" class="pill neutral">Hazır</span>
           </div>
 
+          <div class="flow-connector" aria-hidden="true">
+            <div class="flow-line"></div>
+            <div class="flow-packet" id="flowPacket"></div>
+          </div>
+
           <div class="flow-steps" id="pipeline"></div>
 
           <div class="explain-strip">
-            <div>
-              <span>Fault hedefi</span>
-              <strong id="faultTarget">Yok</strong>
+            <div class="explain-card">
+              <span class="explain-icon" aria-hidden="true">🎯</span>
+              <div>
+                <span>Fault hedefi</span>
+                <strong id="faultTarget">Yok</strong>
+              </div>
             </div>
-            <div>
-              <span>Beklenen etki</span>
-              <strong id="expectedImpact">HTTP 200, düşük latency</strong>
+            <div class="explain-card">
+              <span class="explain-icon" aria-hidden="true">📊</span>
+              <div>
+                <span>Beklenen etki</span>
+                <strong id="expectedImpact">HTTP 200, düşük latency</strong>
+              </div>
             </div>
-            <div>
-              <span>Son sipariş</span>
-              <strong id="lastLatency">Henüz çalışmadı</strong>
+            <div class="explain-card">
+              <span class="explain-icon" aria-hidden="true">⏱</span>
+              <div>
+                <span>Son sipariş</span>
+                <strong id="lastLatency">Henüz çalışmadı</strong>
+              </div>
             </div>
           </div>
         </section>
       </section>
 
-      <section class="evidence-grid">
+      <section class="evidence-grid fade-in delay-4">
         <section class="metrics-panel">
           <div class="panel-heading">
             <div>
-              <h2>Deney Özeti</h2>
+              <h2>
+                <span class="panel-icon" aria-hidden="true">📈</span>
+                Deney Özeti
+              </h2>
               <p class="panel-note">Seçtiğin sayı kadar sipariş gönderir; P50, P99 ve hata oranını canlı hesaplar.</p>
             </div>
             <div class="experiment-controls">
@@ -98,11 +204,11 @@
               <span>Örnek</span>
               <strong id="sampleSummary">0</strong>
             </div>
-            <div class="metric-tile">
+            <div class="metric-tile highlight">
               <span>P50</span>
               <strong id="p50Metric">-</strong>
             </div>
-            <div class="metric-tile">
+            <div class="metric-tile highlight">
               <span>P99</span>
               <strong id="p99Metric">-</strong>
             </div>
@@ -118,7 +224,10 @@
         <section class="result-panel">
           <div class="panel-heading">
             <div>
-              <h2>Sonuç ve Kanıt</h2>
+              <h2>
+                <span class="panel-icon" aria-hidden="true">🔍</span>
+                Sonuç ve Kanıt
+              </h2>
               <p id="resultSummary" class="panel-note">Bir sipariş çalıştırınca burada zincirin sonucu ve hata nedeni görünür.</p>
             </div>
           </div>
@@ -132,8 +241,13 @@
           </div>
         </section>
       </section>
+
+      <footer class="footer fade-in delay-4">
+        <span>OpenFaaS Chaos Engineering Framework</span>
+        <span id="connectionStatus" class="connection-status">Bağlanıyor…</span>
+      </footer>
     </main>
 
-    <script src="/app.js"></script>
+    <script src="app.js"></script>
   </body>
 </html>

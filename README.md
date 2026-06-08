@@ -44,6 +44,34 @@ The dashboard lets you switch between baseline, payment latency, inventory error
 
 For presentation, use **Tek Sipariş Çalıştır** to show one request moving through Order Validator, Inventory Checker, Payment Processor, and Notification Dispatcher. Use **N Sipariş Test Et** only when you want to demonstrate error rate and P50/P99 latency under repeated requests; the button label follows the request-count input. Use **Testi Durdur** to stop a repeated-order experiment before all requests finish.
 
+## Mod B Quick Start (OpenFaaS + k3s + Prometheus + Grafana)
+
+Full infrastructure stack with k3d local registry:
+
+```bash
+npm run setup:mod-b
+npm run port-forward:mod-b
+open http://127.0.0.1:8088/ui/
+open http://127.0.0.1:3002
+```
+
+The presentation UI at **http://127.0.0.1:8088/ui/** includes a step-by-step guide, live pipeline animation, scenario switching, and links to Prometheus and Grafana.
+
+Grafana login is `admin` / `admin`. Open the **OpenFaaS Chaos Engineering** dashboard after sending traffic.
+
+Useful commands:
+
+```bash
+npm run smoke:openfaas
+bash infra/openfaas/set-fault.sh payment-processor latencyMs 500
+ORDER_VALIDATOR_URL=http://127.0.0.1:18088/function/order-validator SCENARIO=A-baseline k6 run tests/order-flow.k6.js
+npm run teardown:mod-b
+```
+
+See `infra/openfaas/README.md` for manual step-by-step details.
+
+## Local Docker Compose Run
+
 Docker Compose is also available:
 
 ```bash

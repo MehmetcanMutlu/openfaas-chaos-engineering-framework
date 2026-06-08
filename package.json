@@ -7,11 +7,17 @@
   "scripts": {
     "start": "node src/server.js",
     "ui": "node src/ui-server.js",
+    "ui:mod-b": "OPENFAAS_GATEWAY=http://127.0.0.1:18088 PRESENTATION_PORT=8088 UI_BASE_PATH=/ui node src/presentation-server.js",
     "dev:local": "bash scripts/start-local.sh",
     "serve:local": "bash scripts/serve-local.sh",
     "stop:local": "bash scripts/stop-local.sh",
+    "setup:mod-b": "PATH=\"$HOME/.arkade/bin:/opt/homebrew/bin:/usr/local/bin:$PATH\" bash infra/openfaas/bootstrap-mod-b.sh",
+    "deploy:openfaas": "bash infra/openfaas/deploy-k3d-registry.sh",
+    "port-forward:mod-b": "bash infra/openfaas/port-forward.sh",
+    "smoke:openfaas": "bash infra/openfaas/smoke-test.sh",
+    "teardown:mod-b": "bash infra/openfaas/teardown-mod-b.sh",
     "test": "node --test tests/unit/*.test.js",
-    "lint": "node --check src/server.js && node --check src/ui-server.js && node --check src/shared/*.js && node --check src/functions/*.js && node --check public/app.js"
+    "lint": "node --check src/server.js && node --check src/ui-server.js && node --check src/presentation-server.js && node --check src/shared/*.js && node --check src/functions/*.js && node --check public/app.js"
   },
   "engines": {
     "node": ">=20.0.0"

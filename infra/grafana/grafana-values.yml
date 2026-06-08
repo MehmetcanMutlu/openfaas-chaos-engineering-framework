@@ -12,6 +12,7 @@ datasources:
     apiVersion: 1
     datasources:
       - name: Prometheus
+        uid: Prometheus
         type: prometheus
         access: proxy
         url: http://prometheus.openfaas:9090

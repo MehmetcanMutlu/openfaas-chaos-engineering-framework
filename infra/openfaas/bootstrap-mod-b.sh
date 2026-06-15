@@ -129,12 +129,13 @@ else
   k3d cluster start "$K3D_CLUSTER" >/dev/null 2>&1 || true
 fi
 
-KUBECONFIG_FILE="$(mktemp -t openfaas-kubeconfig.XXXXXX)"
+mkdir -p tmp/run
+KUBECONFIG_FILE="${KUBECONFIG_FILE:-tmp/run/kubeconfig}"
 if ! k3d kubeconfig get "$K3D_CLUSTER" > "$KUBECONFIG_FILE" 2>/dev/null; then
   echo "Failed to read kubeconfig for cluster ${K3D_CLUSTER}" >&2
   exit 1
 fi
-export KUBECONFIG="$KUBECONFIG_FILE"
+export KUBECONFIG="$(cd "$(dirname "$KUBECONFIG_FILE")" && pwd)/$(basename "$KUBECONFIG_FILE")"
 
 for _ in $(seq 1 30); do
   if kubectl get nodes >/dev/null 2>&1; then

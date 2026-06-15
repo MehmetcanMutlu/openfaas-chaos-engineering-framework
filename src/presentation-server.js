@@ -153,23 +153,37 @@ async function getMetricsSummary() {
 
 async function postOrder(payload) {
   const startedAt = process.hrtime.bigint();
-  const response = await fetch(services[0].url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-request-id": randomUUID()
-    },
-    body: JSON.stringify(payload)
-  });
-  const durationMs = Math.round(Number(process.hrtime.bigint() - startedAt) / 1e6);
-  const text = await response.text();
+  try {
+    const response = await fetch(services[0].url, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-request-id": randomUUID()
+      },
+      body: JSON.stringify(payload)
+    });
+    const durationMs = Math.round(Number(process.hrtime.bigint() - startedAt) / 1e6);
+    const text = await response.text();
 
-  return {
-    status: response.status,
-    ok: response.status >= 200 && response.status < 300,
-    durationMs,
-    body: parseBody(text)
-  };
+    return {
+      status: response.status,
+      ok: response.status >= 200 && response.status < 300,
+      durationMs,
+      body: parseBody(text)
+    };
+  } catch (error) {
+    const durationMs = Math.round(Number(process.hrtime.bigint() - startedAt) / 1e6);
+    return {
+      status: 503,
+      ok: false,
+      durationMs,
+      body: {
+        error: "OpenFaaS gateway'e bağlanılamadı",
+        message: error.message,
+        hint: "npm run port-forward:mod-b çalıştır ve k3d cluster'ın ayakta olduğundan emin ol"
+      }
+    };
+  }
 }
 
 async function applyScenario(scenarioId) {

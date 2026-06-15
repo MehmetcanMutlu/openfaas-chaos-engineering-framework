@@ -50,10 +50,19 @@ Full infrastructure stack with k3d local registry:
 
 ```bash
 npm run setup:mod-b
-npm run port-forward:mod-b
+npm run port-forward:mod-b   # Bu terminali açık tut — supervisor tüm portları yönetir
 open http://127.0.0.1:8088/ui/
 open http://127.0.0.1:3002
 ```
+
+`port-forward:mod-b` bir supervisor başlatır; k3d cluster durmuşsa otomatik ayağa kaldırır ve şu portları açar:
+
+| Servis | URL |
+|--------|-----|
+| Sunum UI | http://127.0.0.1:8088/ui/ |
+| OpenFaaS gateway | http://127.0.0.1:18088 |
+| Prometheus | http://127.0.0.1:9090 |
+| Grafana | http://127.0.0.1:3002 |
 
 The presentation UI at **http://127.0.0.1:8088/ui/** includes a step-by-step guide, live pipeline animation, scenario switching, and links to Prometheus and Grafana.
 
